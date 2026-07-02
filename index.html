@@ -85,6 +85,8 @@
   .qCard{background:var(--panel);border-radius:22px;padding:22px;text-align:center;border:1px solid #2c3574;
     box-shadow:0 10px 24px rgba(0,0,0,.35);}
   #problem{font-size:clamp(34px,7vw,60px);font-weight:bold;letter-spacing:2px;min-height:1.2em;}
+  #problem .frac{display:inline-flex;flex-direction:column;vertical-align:middle;font-size:.6em;line-height:1.05;margin:0 6px;text-align:center;}
+  #problem .frac span:first-child{border-bottom:4px solid var(--ink);padding:0 8px;}
   #answer{font-family:inherit;font-size:32px;font-weight:bold;text-align:center;width:min(280px,80%);
     margin-top:14px;padding:10px;border-radius:14px;border:3px solid #37418f;background:#101540;color:var(--ink);}
   #answer:focus{outline:none;border-color:var(--cyan);}
@@ -172,7 +174,7 @@
         <input id="answer" inputmode="numeric" autocomplete="off" placeholder="?">
         <div id="feedback"></div>
       </div>
-      <div class="hint">Type your answer and press <b>Enter</b> to fire the engines!</div>
+      <div class="hint">Type your answer and press <b>Enter</b> to fire the engines! Fractions can be typed like <b>3/4</b> or <b>0.75</b>.</div>
     </div>
   </div>
 </div>
@@ -280,10 +282,10 @@ const ROUND_SECS=90;
     Commander (E): + and − only, all double-digit
     Astronaut (E): multiplication & division                    */
 const DIFFS={
-  1:{name:"Cadet",hint:"Adding & subtracting — mostly small numbers. Warm up the engines!",base:25},
-  2:{name:"Pilot",hint:"Adding & subtracting — half small, half bigger numbers!",base:40},
-  3:{name:"Commander",hint:"Double-digit adding & subtracting — precision flying!",base:60},
-  4:{name:"Astronaut",hint:"Multiplication & division — Moon or bust!",base:100},
+  1:{name:"Cadet",hint:"Adding & subtracting up to 20 — warm up the engines!",base:25},
+  2:{name:"Pilot",hint:"Adding & subtracting up to 60 — full throttle!",base:40},
+  3:{name:"Commander",hint:"Multiplication facts up to 12 × 12 — precision flying!",base:60},
+  4:{name:"Astronaut",hint:"Adding & subtracting fractions — Moon or bust!",base:100},
 };
 const MILESTONES=[
   {km:12,icon:"✈️",name:"Airliner cruise (12 km)",fact:"Passenger jets cruise around 10–12 km up, where the thin air lets them fly faster using less fuel."},
@@ -328,29 +330,51 @@ refreshMenuBest();
 const ri=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
 const pick=a=>a[ri(0,a.length-1)];
 
-function addSub(doubleChance){
-  // Pick each operand: double-digit with given probability, else single-digit.
-  const num=()=>Math.random()<doubleChance?ri(10,99):ri(2,9);
-  let a=num(),b=num();
-  if(Math.random()<0.5){ // addition
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b];}return a||1;}
+function fracHTML(n,d){
+  if(d===1)return `${n}`;
+  return `<span class="frac"><span>${n}</span><span>${d}</span></span>`;
+}
+
+function addSub(max){
+  // Whole-number add/sub with both operands and the answer within [0,max].
+  let a=ri(1,max),b=ri(1,max);
+  if(Math.random()<0.5){                 // addition — keep sum ≤ max
+    while(a+b>max){a=ri(1,max);b=ri(1,max);}
     return {text:`${a} + ${b}`,ans:a+b};
   }
-  if(b>a)[a,b]=[b,a]; // subtraction, keep answers ≥ 0
+  if(b>a)[a,b]=[b,a];                     // subtraction — answer ≥ 0
   return {text:`${a} − ${b}`,ans:a-b};
 }
+
+function fracProblem(){
+  // Addition/subtraction of simple fractions (denominators 2,3,4,5,6,8),
+  // sometimes using a whole number like 1. Answer stored as exact decimal.
+  const dens=[2,3,4,5,6,8];
+  const mk=()=>{
+    if(Math.random()<0.22)return {n:1,d:1};      // whole number 1
+    const d=pick(dens);
+    return {n:ri(1,d-1),d};                       // proper fraction < 1
+  };
+  let x=mk(), y=mk();
+  const xv=x.n/x.d, yv=y.n/y.d;
+  if(Math.random()<0.5){                          // addition
+    return {text:fracHTML(x.n,x.d)+' + '+fracHTML(y.n,y.d),ans:xv+yv};
+  }
+  // subtraction — order so the answer isn't negative
+  if(yv>xv)[x,y]=[y,x];
+  return {text:fracHTML(x.n,x.d)+' − '+fracHTML(y.n,y.d),ans:x.n/x.d-y.n/y.d};
+}
+
 function genProblem(){
   switch(diff){
-    case 1: return addSub(0.2);          // Cadet: 80% single, 20% double
-    case 2: return addSub(0.5);          // Pilot: 50/50
-    case 3: return addSub(1);            // Commander: all double-digit
-    case 4:{                             // Astronaut: × and ÷
-      if(Math.random()<0.5){
-        const a=ri(3,12),b=ri(3,12);
-        return {text:`${a} × ${b}`,ans:a*b};
-      }
-      const b=ri(3,12),q=ri(3,12);
-      return {text:`${b*q} ÷ ${b}`,ans:q};
+    case 1: return {...addSub(20), frac:false};   // Cadet: add/sub up to 20
+    case 2: return {...addSub(60), frac:false};   // Pilot: add/sub up to 60
+    case 3:{                                       // Commander: mult facts to 12×12
+      const a=ri(2,12),b=ri(2,12);
+      return {text:`${a} × ${b}`,ans:a*b,frac:false};
     }
+    case 4: return {...fracProblem(), frac:true};  // Astronaut: fraction add/sub
   }
 }
 
@@ -403,15 +427,38 @@ function beginRound(){
 function nextProblem(){
   if(g.done)return;
   g.cur=genProblem();
-  $('problem').textContent=g.cur.text+' = ?';
+  $('problem').innerHTML=g.cur.text+' = ?';
+  $('answer').inputMode=g.cur.frac?'text':'numeric';
   $('answer').value=''; $('answer').className=''; $('answer').focus();
+}
+function ansLabel(v){
+  if(Number.isInteger(v))return String(v);
+  // show as a tidy fraction when it matches a small denominator
+  for(const d of [2,3,4,5,6,8,10,12,15,16,20,24]){
+    const n=v*d;
+    if(Math.abs(n-Math.round(n))<0.001){
+      const nn=Math.round(n),g=gcd(nn,d);
+      const sn=nn/g,sd=d/g;
+      const whole=Math.floor(sn/sd), rem=sn%sd;
+      if(sd===1)return String(sn);
+      return whole>0?`${whole} ${rem}/${sd}`:`${sn}/${sd}`;
+    }
+  }
+  return String(Math.round(v*100)/100);
+}
+function parseAns(s){
+  s=s.trim().replace(',','.');
+  if(!s)return NaN;
+  const m=s.match(/^(-?\d+)\s*\/\s*(\d+)$/);   // fraction like 3/4
+  if(m){const q=+m[2];return q? (+m[1])/q : NaN;}
+  return parseFloat(s);                          // whole number or decimal
 }
 function submit(){
   if(g.done||!g.cur)return;
-  const v=parseInt($('answer').value.trim(),10);
+  const v=parseAns($('answer').value);
   if(isNaN(v))return;
   g.attempts++;
-  if(v===g.cur.ans){
+  if(Math.abs(v-g.cur.ans)<0.001){
     g.solved++; g.streak++; g.bestStreak=Math.max(g.bestStreak,g.streak);
     const oldBoost=g.boost;
     g.boost=Math.min(128, Math.pow(2,Math.floor(g.streak/4)));
@@ -424,7 +471,7 @@ function submit(){
     setTimeout(nextProblem,220);
   }else{
     g.streak=0; g.boost=1;
-    flash(`Not quite — it was ${g.cur.ans}. Boosters reset!`,'no');
+    flash(`Not quite — it was ${ansLabel(g.cur.ans)}. Boosters reset!`,'no');
     sfx.wrong();
     $('answer').className='bad';
     setTimeout(nextProblem,900);
